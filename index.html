@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LoL Lane Coach — Offline (Summoner’s Rift)</title>
+<meta name="description" content="Pick lane → your champ → enemy champ. Get matchup-aware lane plans, items, runes. Works fully offline. Mobile + desktop." />
+<style>
+  :root{
+    --bg:#0a0f1a; --panel:#0e1424; --line:#1b2440; --ink:#e9edff; --muted:#a8b3d5; --acc:#60a5ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 800px at 50% -10%,#142042 6%,#0a0f1a 55%);color:var(--ink);
+       font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+  header{position:sticky;top:0;z-index:10;background:rgba(10,15,26,.7);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .wrap{max-width:1000px;margin:0 auto;padding:.9rem 1rem}
+  h1{margin:.1rem 0;font-size:1.1rem}
+  .sub{color:var(--muted);font-size:.92rem}
+  main{min-height:calc(100dvh - 64px);display:grid;place-items:start center}
+  .card{width:min(980px,94vw);margin:1rem auto;background:linear-gradient(180deg,#0f1530,#0d1328);
+        border:1px solid var(--line);border-radius:16px;padding:1rem}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem}
+  @media (max-width:900px){.row{grid-template-columns:1fr}}
+  .picker{position:relative;border:1px solid var(--line);background:#0b1220;border-radius:12px;padding:.45rem .6rem;display:flex;align-items:center;gap:.6rem}
+  .picker input, .picker select{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font-size:1rem}
+  .optbox{position:absolute;left:0;right:0;top:100%;background:#0b1220;border:1px solid var(--line);border-radius:12px;margin-top:.35rem;max-height:280px;overflow:auto;z-index:20;display:none}
+  .opt{padding:.42rem .6rem;border-bottom:1px solid #111a31;cursor:pointer}
+  .opt:hover{background:#0f1a33}
+  .cta{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}
+  button{background:#172553;border:1px solid #24336d;color:#fff;border-radius:10px;padding:.55rem .85rem;cursor:pointer}
+  button[disabled]{opacity:.6;cursor:not-allowed}
+  .pill{display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--line);background:#0e1733;padding:.25rem .55rem;border-radius:999px;font-size:.85rem}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin-top:.7rem}
+  @media (max-width:760px){.grid{grid-template-columns:1fr}}
+  .kv{border:1px solid var(--line);background:#0b1220;border-radius:12px;padding:.65rem}
+  .kv h4{margin:.1rem 0 .35rem;color:#cfe1ff;font-size:.95rem}
+  .tags{display:flex;flex-wrap:wrap;gap:.35rem}
+  .tag{border:1px solid #2b3868;background:#0e1733;border-radius:999px;padding:.22rem .55rem;font-size:.84rem;color:#d7e8ff}
+  ul{margin:.2rem 0 .2rem 1rem;line-height:1.45}
+  .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>LoL Lane Coach (Offline — SR)</h1>
+    <div class="sub">Pick lane → your champ → enemy champ. Tailored lane plans, items, runes. Works offline; mobile + desktop.</div>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="row">
+      <label class="picker">Lane
+        <select id="lane">
+          <option value="top">Top</option>
+          <option value="jungle">Jungle</option>
+          <option value="mid" selected>Mid</option>
+          <option value="adc">ADC</option>
+          <option value="support">Support</option>
+        </select>
+      </label>
+      <div class="picker">
+        <input id="you" placeholder="Your champion (e.g., Ahri)" autocomplete="off">
+        <div class="optbox" id="youList"></div>
+      </div>
+      <div class="picker">
+        <input id="them" placeholder="Enemy champion (e.g., Zed)" autocomplete="off">
+        <div class="optbox" id="themList"></div>
+      </div>
+    </div>
+    <div class="cta">
+      <button id="analyze">Analyze matchup</button>
+      <button id="swap">Swap (you ⇄ them)</button>
+      <span class="pill" id="status">Ready</span>
+    </div>
+
+    <div id="results" style="display:none">
+      <div class="grid">
+        <div class="kv" style="grid-column:1/-1">
+          <h4>Matchup</h4>
+          <div class="tags">
+            <span class="tag" id="youBadge"></span>
+            <span class="tag">vs</span>
+            <span class="tag" id="themBadge"></span>
+            <span class="tag" id="laneBadge"></span>
+          </div>
+        </div>
+
+        <div class="kv">
+          <h4>Summoners</h4>
+          <div class="tags" id="summoners"></div>
+          <div class="muted" id="sumNotes"></div>
+        </div>
+        <div class="kv">
+          <h4>Runes</h4>
+          <div class="tags" id="runes"></div>
+          <div class="muted" id="runeNotes"></div>
+        </div>
+
+        <div class="kv">
+          <h4>Start</h4>
+          <div class="tags" id="start"></div>
+        </div>
+        <div class="kv">
+          <h4>Core</h4>
+          <div class="tags" id="core"></div>
+        </div>
+        <div class="kv">
+          <h4>Situational</h4>
+          <div class="tags" id="situational"></div>
+        </div>
+        <div class="kv">
+          <h4>Skill Order</h4>
+          <div class="tags" id="skills"></div>
+        </div>
+
+        <div class="kv" style="grid-column:1/-1">
+          <h4>Lane plan</h4>
+          <ul id="plan"></ul>
+          <div class="muted" id="extras"></div>
+          <div class="cta" style="margin-top:.5rem">
+            <button id="copy">Copy plan</button>
+            <button id="reset">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<script>
+/* ========= Champion list (display names) ========= */
+const CHAMPS = [
+  "Aatrox","Ahri","Akali","Akshan","Alistar","Amumu","Anivia","Annie","Aphelios","Ashe","Aurelion Sol","Azir","Bard","Bel'Veth","Blitzcrank","Brand","Braum","Briar",
+  "Caitlyn","Camille","Cassiopeia","Cho'Gath","Corki","Darius","Diana","Dr. Mundo","Draven","Ekko","Elise","Evelynn","Ezreal","Fiddlesticks","Fiora","Fizz","Galio","Gangplank","Garen","Gnar","Gragas","Graves","Gwen",
+  "Hecarim","Heimerdinger","Illaoi","Irelia","Ivern","Janna","Jarvan IV","Jax","Jayce","Jhin","Jinx","K'Sante","Kai'Sa","Kalista","Karma","Karthus","Kassadin","Katarina","Kayle","Kayn","Kennen","Kha'Zix","Kindred","Kled","Kog'Maw",
+  "LeBlanc","Lee Sin","Leona","Lillia","Lissandra","Lucian","Lulu","Lux","Malphite","Malzahar","Maokai","Master Yi","Milio","Miss Fortune","Mordekaiser","Morgana","Nami","Naafiri","Nasus","Nautilus","Neeko","Nidalee","Nilah","Nocturne","Nunu & Willump",
+  "Olaf","Orianna","Ornn","Pantheon","Poppy","Pyke","Qiyana","Quinn","Rakan","Rammus","Rek'Sai","Rell","Renata Glasc","Renekton","Rengar","Riven","Rumble","Ryze","Samira","Sejuani","Senna","Seraphine","Sett","Shaco","Shen","Shyvana","Singed","Sion","Sivir","Skarner","Sona","Soraka","Swain",
+  "Sylas","Syndra","Tahm Kench","Taliyah","Talon","Taric","Teemo","Thresh","Tristana","Trundle","Tryndamere","Twisted Fate","Twitch","Udyr","Urgot","Varus","Vayne","Veigar","Vel'Koz","Vex","Vi","Viego","Viktor","Vladimir","Volibear","Warwick","Wukong","Xayah","Xerath","Xin Zhao","Yasuo","Yone","Yorick","Yuumi","Zac","Zed","Zeri","Ziggs","Zilean","Zoe","Zyra"
+];
+
+/* ========= Lane baselines (Summoner’s Rift) ========= */
+const LANE_DEFAULTS = {
+  top:{sum:['Flash','Teleport'], runes:['Conqueror','Triumph','Legend: Alacrity','Last Stand','Bone Plating','Overgrowth'],
+       start:["Doran's Blade/Shield"], core:['Armor/MR boots','Bruiser mythic','Black Cleaver'], sit:["Executioner's","Bramble","Randuin's"], skills:'Max main damage → utility'},
+  jungle:{sum:['Smite','Flash'], runes:['Conqueror','Triumph','Legend: Tenacity','Coup de Grace','Magical Footwear','Cosmic Insight'],
+       start:['Jungle item','Refillable'], core:['Mythic','Boots','Damage/utility mix'], sit:['Stopwatch','Anti-heal','MR/Armor'], skills:'Max clear or gank tool'},
+  mid:{sum:['Flash','Teleport'], runes:['Electrocute/First Strike','Taste of Blood','Eyeball Collection','Ultimate Hunter','Manaflow Band','Transcendence'],
+       start:["Doran's Ring/Corrupting"], core:['Ludens/Liandry/Everfrost','Sorcerer Boots',"Shadowflame/Zhonya's"], sit:["Banshee's","Morello","Void Staff"], skills:'Max Q → W → E (most mages)'},
+  adc:{sum:['Flash','Heal/Cleanse'], runes:['Lethal Tempo','Presence of Mind','Legend: Bloodline','Coup de Grace','Taste of Blood','Treasure Hunter'],
+       start:["Doran's Blade"], core:["Mythic ADC","Berserker's","RFC/PD/IE"], sit:['QSS','GA','BT',"Wit's End"], skills:'Max primary DPS spell'},
+  support:{sum:['Flash','Ignite/Exhaust'], runes:['Guardian/Aftershock/Aery','Font of Life','Bone Plating','Revitalize','Biscuit Delivery','Cosmic Insight'],
+       start:['Support item','2 Pots'], core:['Boots','Mythic support','Redemption/Mikael'], sit:["Anathema's","Zeke's","Chemtech Putrifier"], skills:'Max poke/heal or engage'}
+};
+
+/* ========= Base profiles (seeded) =========
+   Schema per champ:
+   {
+     role:["mid"], tags:["ranged","burst","mobility","cc"], weak:["mana-early","skillshots"], spikes:["6","lost-chapter"],
+     skills:"Max Q > W > E", runes:[...], start:[...], core:[...], sit:[...],
+     tips:{early:[...], mid:[...], late:[...]}
+   }
+*/
+const PROFILES = {
+  /* — Core mids and popular champs — */
+  "Ahri": { role:["mid"], tags:["ranged","pick","burst","mobility","cc","wave","spikes-6"],
+    weak:["mana-early","skillshots","vs-heavy-shield","vs-hard-cc"],
+    spikes:["6","lost-chapter"], skills:"Max Q > W > E",
+    runes:["Electrocute","Taste of Blood","Eyeball","Ultimate Hunter","Transcendence","Scorch"],
+    start:["Doran's Ring + Pot"], core:["Luden's","Sorcerer's","Shadowflame"],
+    sit:["Seeker's","Banshee's","Zhonya's","Morello"],
+    tips:{
+      early:[
+        "Stand behind minions to reduce skillshot trades; thin wave with Q last hit.",
+        "Trade on Q return; hold Charm (E) to punish dashes or post-ult reappear."
+      ],
+      mid:["Roam after push with R charges; path through fog for pick windows.","Fish Charm first; if it lands, W+Q guarantees burst."],
+      late:["Play picks around vision; peel with Charm vs divers.","Save a dash charge to escape after going in."]
+    }
+  },
+  "Zed": { role:["mid"], tags:["melee","assassin","burst","mobility","allin","spikes-6","spikes-dirk"],
+    weak:["vs-armor","vs-point-cc","wave-early"], spikes:["6","dirk"], skills:"Max Q > E > W",
+    runes:["Electrocute","Sudden Impact","Eyeball","Ultimate Hunter","Transcendence","Scorch"],
+    start:["Long Sword + 3 Pots"], core:["Eclipse/Prowler's","Ionian","Serylda"],
+    sit:["Edge of Night","GA","Maw","Serpent's Fang"],
+    tips:{ early:["Short trades after W; stand behind minions to cut Q damage."], mid:["Armor spike (Seeker's/Plated) flips all-ins."], late:["Track R; peel and exhaust his re-engage."] }
+  },
+  "Lux": { role:["mid","support"], tags:["ranged","poke","pick","burst","wave"], weak:["vs-gapclose","squishy","mana-early"],
+    spikes:["lost-chapter","6"], skills:"Max E > Q > W",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic Insight"],
+    start:["Doran's Ring + Pot"], core:["Luden's","Sorcerer's","Horizon"],
+    sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Stand away from your own caster minions to avoid E+Q lineups."], mid:["Shove & move; hide E cast in fog."], late:["Fish picks; peel vs assassins."] }
+  },
+  "Fizz": { role:["mid"], tags:["melee","assassin","burst","mobility","allin","untargetable","spikes-6"],
+    weak:["wave-early","vs-armor","vs-point-cc"], spikes:["6"], skills:"Max E > W > Q",
+    runes:["Electrocute","Sudden Impact","Eyeball","Treasure Hunter","Transcendence","Scorch"],
+    start:["Doran's Shield","Corrupting"], core:["Lich Bane","Sorcerer's","Zhonya's"],
+    sit:["Seeker's","Banshee's","Void"],
+    tips:{ early:["Hold CC until after he uses E; deny waveclear early."], mid:["Stand behind minions to reduce R hit chance."], late:["Group mid; ward flanks; bait E with soft engages."] }
+  },
+  "Yasuo": { role:["mid","top"], tags:["melee","skirmisher","dps","mobility","allin","windwall","spikes-2item"],
+    weak:["vs-point-cc","pre-crit","wave-early"], spikes:["Zeal","IE/Shieldbow"], skills:"Max Q > E > W",
+    runes:["Lethal Tempo","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Shieldbow","Berserker's","Infinity Edge"],
+    sit:["Wit's End","Death's Dance","GA","Randuin's"],
+    tips:{ early:["Pop flow shield first; trade after."], mid:["Avoid fighting in big waves where he dashes freely."], late:["Peel and deny knockup chains."] }
+  },
+  "Yone": { role:["mid","top"], tags:["melee","assassin","dps","mobility","allin","spikes-2item"],
+    weak:["vs-point-cc","pre-2item","wave-early"], spikes:["2 items"], skills:"Max Q > E > W",
+    runes:["Lethal Tempo","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Shield/Blade"], core:["Shieldbow","Berserker's","IE/Bloodthirster"],
+    sit:["Wit's End","GA","Randuin's"],
+    tips:{ early:["Short trades; punish on E return."], mid:["Randuin's/Plated flips DPS."], late:["Peel & kite; kill him on E return if he overcommits."] }
+  },
+
+  /* — Tops (juggernauts/duelists/tanks) — */
+  "Darius": { role:["top"], tags:["melee","juggernaut","allin","snowball","dps"], weak:["kite","range","cc","mana-early"],
+    spikes:["Sheen/Dirk","6"], skills:"Max Q > E > W",
+    runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade/Shield"], core:["Stridebreaker","Plated","Dead Man's"],
+    sit:["Executioner's","Randuin's","Thornmail"],
+    tips:{ early:["Keep wave near your side; short trades around Q edge."], mid:["Armor + kiting tools blunt him."], late:["Don’t let him stack on carries—peel."] }
+  },
+  "Garen": { role:["top"], tags:["melee","juggernaut","silence","execute","tank"], weak:["kite","antiheal","cc"], spikes:["6","Stride"],
+    skills:"Max E > Q > W", runes:["Conqueror/Phase Rush","Triumph","Alacrity","Coup","Second Wind","Unflinching"],
+    start:["Doran's Shield"], core:["Stridebreaker","Plated","Dead Man's"], sit:["Executioner's","Randuin's","Anathema's"],
+    tips:{ early:["Short trades; avoid Q→E full spin time."], mid:["Grievous denies passive."], late:["Kite; don’t clump for silence access."] }
+  },
+  "Camille": { role:["top"], tags:["diver","true","mobility","split","allin"], weak:["early-poke","vs-armor","vs-disengage"], spikes:["Sheen","6","2 items"],
+    skills:"Max Q > E > W", runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Trinity","Plated/Mercs","Ravenous/Death's"], sit:["Randuin's","Frozen Heart","Executioner's"],
+    tips:{ early:["Punish when E down."], mid:["Don’t fight inside her R without peel."], late:["Ward flanks; deny hookshot angles."] }
+  },
+  "Malphite": { role:["top"], tags:["tank","anti-ad","armor-scale","engage"], weak:["vs-ap-poke","mana-early","range"], spikes:["6","Armor mythic"],
+    skills:"Max Q > E > W", runes:["Grasp","Shield Bash","Bone Plating","Overgrowth","Manaflow","Transcendence"],
+    start:["Doran's Shield"], core:["Sunfire/Frost","Plated","Thornmail"], sit:["Frozen Heart","Force of Nature","Anathema's"],
+    tips:{ early:["Avoid extended trades pre-armor."], mid:["Don’t clump for R; track flash."], late:["Space out; punish when Q down."] }
+  },
+  "Fiora": { role:["top"], tags:["duelist","true","mobility","split","parry"], weak:["cc-chains","aoe","grouped-fights"], spikes:["Ravenous","2 items"],
+    skills:"Max Q > E > W", runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Ravenous","Triforce","Hullbreaker"], sit:["Randuin's","Thornmail","Death's Dance"],
+    tips:{ early:["Bait W; don’t telegraph CC."], mid:["Group to deny side pressure."], late:["Deep wards to catch her between waves."] }
+  },
+  "Gnar": { role:["top"], tags:["range-melee","poke","kite","mega-engage"], weak:["vs-hard-engage","mini-squishy","rage-manage"], spikes:["Triforce","2 items"],
+    skills:"Max Q > W > E", runes:["Fleet","Presence","Alacrity","Cut Down","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Triforce","Plated","Black Cleaver"], sit:["Randuin's","Wit's End","Frozen Heart"],
+    tips:{ early:["Punish mini; respect mega."], mid:["Force fights off his mega timer."], late:["Ward flanks to stop mega engage."] }
+  },
+
+  /* — Jungle quick seeds (more below via merges) — */
+  "Lee Sin":{ role:["jungle"], tags:["early-gank","skirmish","mobility"], weak:["scales-poor","cc-chains","exhaust"],
+    spikes:["Dirk","Goredrinker"], skills:"Max Q > W > E",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Magical Footwear","Cosmic"],
+    start:["Jungle item"], core:["Goredrinker","Plated","Black Cleaver"], sit:["GA","Maw","Edge of Night"],
+    tips:{ early:["Expect lvl 3 gank; ward tri/raptors."], mid:["Track flash timers for kick plays."], late:["Peel or pick—don’t front-to-back."] }
+  },
+  "Hecarim":{ role:["jungle"], tags:["speed","engage","skirmish","drain"], weak:["antiheal","kite","exhaust"], spikes:["6","2 items"],
+    skills:"Max Q > E > W", runes:["Conqueror","Triumph","Tenacity","Last Stand","Nimbus","Celerity"],
+    start:["Jungle item"], core:["Trinity","Mercs","Death's Dance"], sit:["Thornmail","Randuin's","Force of Nature"],
+    tips:{ early:["Track full clear; punish opposite side."], mid:["Spread vs R fear cone."], late:["Grievous reduces drain; kite post-engage."] }
+  },
+  "Evelynn":{ role:["jungle"], tags:["stealth","pick","ap-assassin"], weak:["pink-wards","grouping","tenacity"],
+    spikes:["6","2 items"], skills:"Max Q > E > W",
+    runes:["Electrocute","Sudden Impact","Eyeball","Relentless","Transcendence","Scorch"],
+    start:["Jungle item"], core:["Rocketbelt","Sorcerer's","Rabadon's"], sit:["Banshee's","Zhonya's","Void"],
+    tips:{ early:["Ward camps at 3:30+; pinks to reveal."], mid:["Group and hug vision; deny flanks."], late:["QSS/cleanse for charm setups."] }
+  },
+
+  /* — ADC quick seeds (more below via merges) — */
+  "Caitlyn": { role:["adc"], tags:["ranged","lane-bully","siege","trap"], weak:["vs-hard-engage","scales-avg"], spikes:["BF","2 items"],
+    skills:"Max Q > W > E", runes:["Lethal Tempo","Presence","Alacrity","Coup","Taste of Blood","Treasure Hunter"],
+    start:["Doran's Blade"], core:["Galeforce","Berserker's","RFC"], sit:["QSS","GA","BT"],
+    tips:{ early:["Shove for plates; trap in brush."], mid:["Siege mid; net only defensively."], late:["Front-to-back; keep max distance."] }
+  },
+  "Jinx": { role:["adc"], tags:["ranged","scaler","dps","aoe"], weak:["immobile","vs-engage","needs-peel"], spikes:["2 items","IE"],
+    skills:"Max Q > W > E", runes:["Lethal Tempo","Presence","Bloodline","Coup","Taste of Blood","Treasure Hunter"],
+    start:["Doran's Blade"], core:["Kraken","Berserker's","RFC"], sit:["QSS","GA","BT"],
+    tips:{ early:["Respect all-ins; scale safely."], mid:["Rocket poke before fights."], late:["Positioning wins — trust peel."] }
+  },
+
+  /* — Supports quick seeds (more below via merges) — */
+  "Leona": { role:["support"], tags:["engage","point-cc","tank"], weak:["poke","disengage","cleanse"], spikes:["2","6"],
+    skills:"Max E > W > Q", runes:["Aftershock","Font of Life","Bone Plating","Unflinching","Biscuit","Cosmic"],
+    start:["Relic","2 Pots"], core:["Locket","Mercs","Knight's Vow"], sit:["Zeke's","Anathema's","Mikael's"],
+    tips:{ early:["Engage only when ADC can follow."], mid:["Flank with sweeper."], late:["Peel carries if dive comp."] }
+  },
+  "Nautilus": { role:["support"], tags:["engage","hook","point-cc","tank"], weak:["poke","disengage","cleanse"], spikes:["6"],
+    skills:"Max Q > W > E", runes:["Aftershock","Font","Bone Plating","Unflinching","Biscuit","Cosmic"],
+    start:["Relic"], core:["Locket","Plated/Mercs","Knight's Vow"], sit:["Anathema's","Zeke's","Abyssal"],
+    tips:{ early:["Hook from fog; punish no flash."], mid:["Start fights on carries."], late:["Peel or pick based on comp."] }
+  }
+};
+
+/* ========= Merge in the rest of the expanded profiles (chunks) ========= */
+/* — Chunk 1/3: Tops & Mids (bruisers, duelists, tanks, core mids) — */
+Object.assign(PROFILES, {
+  "Aatrox": { role:["top"], tags:["melee","drain","bruiser","allin","aoe"], weak:["grievous","kite","cc"], spikes:["Goredrinker","2 items"], skills:"Max Q > E > W",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Second Wind","Unflinching"],
+    start:["Doran's Shield"], core:["Goredrinker","Plated/Mercs","Black Cleaver"], sit:["Executioner's","Death's Dance","Thornmail"],
+    tips:{ early:["Respect Q sweet spots; trade when he misses Q1."], mid:["Don’t brawl on big waves; kite his E/Q chain."], late:["Peel and kite; burst during W cooldown."] } },
+  "Renekton": { role:["top"], tags:["melee","diver","lane-bully","stun","allin"], weak:["scales-poor","kite","armor"], spikes:["Fury 50+","Stride/Black Cleaver"], skills:"Max Q > E > W",
+    runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Stridebreaker","Plated","Black Cleaver"], sit:["Executioner's","Death's Dance","GA"],
+    tips:{ early:["Avoid his fury empowered W windows."], mid:["Armor + kiting flips fights."], late:["Force 5v5; he prefers skirmishes."] } },
+  "Riven": { role:["top"], tags:["melee","mobility","bruiser","cc","allin"], weak:["cc-chains","grievous","exhaust"], spikes:["2 items","CDR"], skills:"Max Q > E > W",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Ravenous","CDR boots","Death's Dance"], sit:["Plated","Randuin's","Executioner's"],
+    tips:{ early:["Punish after she uses E; watch Q3."], mid:["Ward flanks; stopwatch ruins burst."], late:["Exhaust/peel for her R+flash."] } },
+  "Jax": { role:["top"], tags:["melee","duelist","split","dodge","scales"], weak:["aoe","kiting","pre-6"], spikes:["Sheen","2 items"], skills:"Max W > E > Q",
+    runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Trinity","Bork","Plated/Mercs"], sit:["Randuin's","Frozen Heart","Thornmail"],
+    tips:{ early:["Don’t auto during E; trade after it ends."], mid:["Avoid isolated fights if behind."], late:["Kite; don’t 1v1 his 3-item spike."] } },
+  "Irelia": { role:["top","mid"], tags:["melee","dashes","healing","allin"], weak:["grievous","cc-chains","thin-wave"], spikes:["Sheen","2 items"], skills:"Max Q > W > E",
+    runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Trinity","Bork","Wit's End"], sit:["Executioner's","Randuin's","Frozen Heart"],
+    tips:{ early:["Thin wave to deny Q resets; punish missed E."], mid:["Grievous cuts W sustain."], late:["Peel back; kite through slows/terrain."] } },
+  "Sett": { role:["top"], tags:["melee","juggernaut","true-dmg","shield","allin"], weak:["poke","kite","grievous"], spikes:["Stride/Titanic"], skills:"Max Q > W > E",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade/Shield"], core:["Stridebreaker","Titanic","Plated"], sit:["Executioner's","Randuin's","Thornmail"],
+    tips:{ early:["Bait W true-dmg cone; re-engage after."], mid:["Kite his Q movespeed; deny Hexflash angles."], late:["Save displacement for R engage."] } },
+  "Mordekaiser": { role:["top"], tags:["ap-fighter","drain","duel","realm"], weak:["kite","range","qss"], spikes:["Rylai","2 items"], skills:"Max Q > E > W",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Shield"], core:["Rylai","Liandry","Plated/Mercs"], sit:["QSS","Morello","Wit's End"],
+    tips:{ early:["Stand off minions to dodge E; trade after W shield."], mid:["QSS vs R if carry; group to deny isolation."], late:["Peel the realm target on exit."] } },
+  "Nasus": { role:["top"], tags:["scaler","siphon","anti-ad","slow"], weak:["early-bully","freeze","range"], spikes:["2 items"], skills:"Max Q > W > E",
+    runes:["Fleet","Presence","Alacrity","Cut Down","Second Wind","Unflinching"],
+    start:["Doran's Shield"], core:["Trinity/Frozen Heart","Plated","Sunderer"], sit:["Executioner's","Anathema's","Thornmail"],
+    tips:{ early:["Freeze 6–8 minions near tower; punish last hits with jungler."], mid:["Kite Wither; don’t overchase."], late:["Force 5v5; deny split."] } },
+  "Yorick": { role:["top"], tags:["split","ghouls","siege","duelist"], weak:["aoe","disengage","group"], spikes:["Sheen","Hullbreaker"], skills:"Max Q > E > W",
+    runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Trinity","Hullbreaker","Plated"], sit:["Tiamat/AoE","Randuin's","Thornmail"],
+    tips:{ early:["Kill maiden first; avoid mist cage chases."], mid:["Group mid to break side pressure."], late:["Punish TP; collapse when maiden down."] } },
+  "Urgot": { role:["top"], tags:["ranged-melee","execution","tank-dps"], weak:["kite","poke-ap","range"], spikes:["Black Cleaver","2 items"], skills:"Max W > E > Q",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Black Cleaver","Titanic","Plated"], sit:["Randuin's","Thornmail","Anathema's"],
+    tips:{ early:["Respect E flash; deny shotgun leg angles."], mid:["Zone objectives; don’t hug close range."], late:["Save displacement for execute pull."] } },
+  "Kennen": { role:["top","mid"], tags:["ranged","poke-ap","aoe-stun","engage"], weak:["vs-tanks-late","poke-sustain"], spikes:["6","2 items"], skills:"Max Q > W > E",
+    runes:["First Strike/Electrocute","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Blade/Ring"], core:["Rocketbelt","Sorcs","Zhonya's"], sit:["Banshee's","Morello","Shadowflame"],
+    tips:{ early:["Punish last hits with Q; respect E gap close."], mid:["Flank wards for multi-man R."], late:["Spread in choke; stopwatch denies engage."] } },
+  "Jayce": { role:["top","mid"], tags:["ranged","poke-ad","burst","siege"], weak:["vs-engage","mana-early"], spikes:["Serrated Dirk","2 items"], skills:"Max Q > E > W",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Long Sword 3 Pots/Doran's Blade"], core:["Youmuu's","Manamune","Serylda"], sit:["GA","Maw","Edge of Night"],
+    tips:{ early:["Brush control; EQ tap then disengage."], mid:["Siege then rotate; avoid coinflip engage."], late:["Peel and poke; no facechecks without gate."] } },
+  "Quinn": { role:["top"], tags:["ranged","roam","burst"], weak:["hard engage","tanks","cc"], spikes:["6","Dirk"], skills:"Max Q > W > E",
+    runes:["Fleet","Presence","Alacrity","Cut Down","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Youmuu's","Collector","Berserker's"], sit:["GA","Maw","Black Cleaver"],
+    tips:{ early:["Abuse range; blind last hits then back off."], mid:["Roam on R timers—shove then move."], late:["Flank picks; avoid front-to-back vs tanks."] } },
+  "Tryndamere": { role:["top"], tags:["melee","split","crit","sustain"], weak:["cc","kite","exhaust"], spikes:["2 items"], skills:"Max Q > E > W",
+    runes:["Lethal Tempo","Triumph","Alacrity","Last Stand","Second Wind","Unflinching"],
+    start:["Doran's Shield"], core:["Kraken","Navori","Berserker's"], sit:["Randuin's","Frozen Heart","Executioner's"],
+    tips:{ early:["Don’t take long trades on fury; thin wave."], mid:["Save CC for post-R; kite and stall."], late:["Avoid side 1v1; force grouped fights."] } },
+  "Kled": { role:["top"], tags:["melee","skirmisher","mount","allin"], weak:["poke","kite","disengage"], spikes:["6","2 items"], skills:"Max Q > W > E",
+    runes:["Conqueror","Triumph","Alacrity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Blade"], core:["Titanic","Black Cleaver","Plated"], sit:["Executioner's","Randuin's","GA"],
+    tips:{ early:["Punish remount timers; stay away from pocket pistol angles."], mid:["Peel his R path; pre-ward lanes."], late:["CC chains stop remount—kite back."] } },
+  "Illaoi": { role:["top"], tags:["juggernaut","aoe","zone","split"], weak:["disengage","burst","cc"], spikes:["Sheen","2 items"], skills:"Max E > Q > W",
+    runes:["Conqueror","Triumph","Tenacity","Last Stand","Bone Plating","Overgrowth"],
+    start:["Doran's Shield"], core:["Black Cleaver","Sterak's","Plated"], sit:["Executioner's","Anathema's","Randuin's"],
+    tips:{ early:["Respect spirit pull; don’t fight under tentacles."], mid:["Clear tentacles before fights."], late:["Kite R zone; drag to open space."] } },
+  "Shen": { role:["top"], tags:["tank","global","taunt","protect"], weak:["poke","split pressure"], spikes:["6","Sunfire"], skills:"Max Q > E > W",
+    runes:["Grasp","Shield Bash","Bone Plating","Overgrowth","Biscuit","Cosmic"],
+    start:["Doran's Shield"], core:["Sunfire","Mercs","Knight's Vow"], sit:["Anathema's","Thornmail","Randuin's"],
+    tips:{ early:["Short trades around sword recall; avoid extended."], mid:["Track R; ping cross-map."], late:["Taunt divers; peel carry."] } },
+  "Sion": { role:["top"], tags:["tank","engage","push-die"], weak:["sustain-poke","anti-tank"], spikes:["Sunfire","Heartsteel"], skills:"Max Q > W > E",
+    runes:["Grasp","Demolish","Bone Plating","Overgrowth","Biscuit","Cosmic"],
+    start:["Doran's Shield"], core:["Heartsteel","Plated","Thornmail"], sit:["Anathema's","FoN","Randuin's"],
+    tips:{ early:["Side-step Q; poke while shield down."], mid:["Zombie form baits—don’t overchase."], late:["Spread vs R; ward long flanks."] } },
+  "Ornn": { role:["top"], tags:["tank","engage","forge"], weak:["poke","range","split"], spikes:["Sunfire","Frozen Heart"], skills:"Max W > Q > E",
+    runes:["Grasp","Demolish","Bone Plating","Overgrowth","Biscuit","Cosmic"],
+    start:["Doran's Shield"], core:["Sunfire","Frozen Heart","Mercs"], sit:["Anathema's","Thornmail","FoN"],
+    tips:{ early:["Punish after W brittle proc is down."], mid:["Don’t fight in narrow chokes he controls."], late:["Save dash for second horn call."] } },
+  "Cho'Gath": { role:["top","mid"], tags:["tank","true-exec","silence","knockup"], weak:["poke","kiting"], spikes:["Sunfire","6"], skills:"Max E > Q > W",
+    runes:["Grasp","Demolish","Bone Plating","Overgrowth","Biscuit","Cosmic"],
+    start:["Doran's Shield"], core:["Sunfire","Thornmail","FoN"], sit:["Anathema's","Gargoyle","Frozen Heart"],
+    tips:{ early:["Dodge Q; trade after silence used."], mid:["Contest early objectives to limit feast stacks."], late:["Space outside feast range; burst Gargoyle first."] } },
+  "Rumble": { role:["top","mid"], tags:["ap-bruiser","zone","aoe","push"], weak:["heat misman","poke-ap"], spikes:["6","Liandry"], skills:"Max Q > E > W",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Shield"], core:["Liandry","Sorcs","Demonic"], sit:["Zhonya's","Morello","Banshee's"],
+    tips:{ early:["Punish overheat; avoid extended Q if losing."], mid:["Don’t fight on equalizer in chokes."], late:["Stopwatch vs catch; ward flanks."] } },
+  "Akali": { role:["mid","top"], tags:["assassin","mobility","untargetable"], weak:["grievous","pinks","cc"], spikes:["6","2 items"], skills:"Max Q > E > W",
+    runes:["Conqueror/Electrocute","Presence/Taste","Tenacity","Last Stand","Second Wind","Unflinching"],
+    start:["Doran's Shield"], core:["Hextech","Sorcs/Mercs","Shadowflame"], sit:["Seeker's","Zhonya's","Morello"],
+    tips:{ early:["Punish energy gating; trade when shroud is down."], mid:["Pink the shroud before fights."], late:["Exhaust/peel crushes her burst."] } },
+  "Anivia": { role:["mid"], tags:["control","wall","zone","wave"], weak:["mobility","poke"], spikes:["Lost Chapter","2 items"], skills:"Max E > Q > W",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Liandry","Archangel","Rylai"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Don’t blow everything to crack egg alone."], mid:["Fight in open space, not chokes."], late:["Siege denial—split or engage early."] } },
+  "Annie": { role:["mid","support"], tags:["burst","stun","point-click"], weak:["range","poke"], spikes:["6","Luden"], skills:"Max Q > W > E",
+    runes:["Electrocute","Taste","Eyeball","Ultimate Hunter","Manaflow","Transcendence"],
+    start:["Doran's Ring"], core:["Luden","Sorcs","Shadowflame"], sit:["Banshee's","Zhonya's","Morello"],
+    tips:{ early:["Count stun stacks; avoid Tibbers setups."], mid:["Spread vs Tibbers engage."], late:["Track flash; stopwatch if threatened."] } },
+  "Azir": { role:["mid"], tags:["control","dps","soldiers","shove"], weak:["cc","divers","mana-early"], spikes:["Nashor","2 items"], skills:"Max W > Q > E",
+    runes:["Lethal Tempo/First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Nashor","Liandry","Sorcs"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Punish mana; avoid shuffle wall."], mid:["Kill soldiers or disengage."], late:["Front-to-back; stopwatch vs shuffle."] } },
+  "Orianna": { role:["mid"], tags:["control","shield","aoe-wombo"], weak:["divers","poke-ap"], spikes:["Lost Chapter","2 items"], skills:"Max Q > W > E",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Luden/Liandry","Sorcs","Shadowflame"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Trade around ball; bait shield cooldown."], mid:["Don’t clump; track flash+R timers."], late:["Front-to-back; peel with shields."] } },
+  "Syndra": { role:["mid"], tags:["burst","pick","control"], weak:["divers","mobility"], spikes:["Lost Chapter","6","2 items"], skills:"Max Q > W > E",
+    runes:["First Strike/Electrocute","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Luden","Sorcs","Shadowflame"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Side-step E stun; punish mana."], mid:["Don’t facecheck—one-shot threat."], late:["Peel carries; stopwatch vs R."] } },
+  "Veigar": { role:["mid"], tags:["scaler","cage","burst"], weak:["early-bully","range","engage"], spikes:["6","2 items"], skills:"Max Q > W > E",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Luden","Sorcs","Rabadon"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Dodge cage; shove and roam."], mid:["Force him to cage defensively; don’t fight inside."], late:["Flank deny; QSS optional if caught often."] } },
+  "Zoe": { role:["mid"], tags:["poke","pick","bubble"], weak:["hard engage","sidelanes"], spikes:["Luden","2 items"], skills:"Max Q > E > W",
+    runes:["Electrocute/First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Luden","Sorcs","Shadowflame"], sit:["Banshee's","Zhonya's","Morello"],
+    tips:{ early:["Avoid walls vs E; track stolen sums."], mid:["Hide behind wave to block bubbles."], late:["Group; deny flanks."] } },
+  "Xerath": { role:["mid","support"], tags:["long-poke","siege"], weak:["engage","flank"], spikes:["Luden","2 items"], skills:"Max Q > W > E",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Luden","Sorcs","Horizon"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Hide behind minions to block Q; punish on E miss."], mid:["Don’t siege without flank wards."], late:["Spread vs R; engage through fog."] } },
+  "Ryze": { role:["mid","top"], tags:["dps-ap","push","roam","scale"], weak:["short range","cc"], spikes:["2 items","Seraph"], skills:"Max E > Q > W",
+    runes:["Phase Rush","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Tear + Doran's"], core:["Seraph","Liandry","CDR boots"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Shove & move; avoid weak 2v2s."], mid:["Respect Rune Prison + jungler."], late:["Front-to-back; don’t chase ports blind."] } },
+  "Twisted Fate": { role:["mid"], tags:["roam","pick","stun"], weak:["dps","allin"], spikes:["6","Rapid Firecannon"], skills:"Max Q > W > E",
+    runes:["First Strike","Manaflow","Transcendence","Scorch","Biscuit","Cosmic"],
+    start:["Doran's Ring"], core:["Rapid Firecannon","Luden/Liandry","CDR boots"], sit:["Zhonya's","Banshee's","Morello"],
+    tips:{ early:["Shove and track wards to limit ports."], mid:["Ping MIA on 6; counter-roam."], late:["Play grouped; deny side catches."] } },
+  "Talon": { role:["mid"], tags:["assassin","roam","burst"], weak:["armor","cc","group"], spikes:["Dirk","6","2 items"], skills:"Max W > Q > E",
+    runes:["Electrocute","Sudden","Eyeball","Relentless","Transcendence","Scorch"],
+    start:["Long Sword + 3 Pots"], core:["Youmuu's","Serylda","Ionian"], sit:["Edge of Night","GA","Maw"],
+    tips:{ early:["Ward raptors; punish after parkour."], mid:["Armor + vision kills roams."], late:["Group and pink before objectives."] } },
+  "Katarina": { role:["mid"], tags:["assassin","reset","aoe"], weak:["point-cc","grievous","thin-wave"], spikes:["Hextech","2 items"], skills:"Max Q > E > W",
+    runes:["Conqueror/Electrocute","Triumph/Taste","Tenacity","Last Stand","Sudden","Treasure"],
+    start:["Doran's Shield"], core:["Hextech","Nashor","Zhonya's"], sit:["Seeker's","Morello","Banshee's"],
+    tips:{ early:["Hold CC for her E; sidestep dagger zones."], mid:["Spread vs R; don’t clump."], late:["Exhaust/peel to stop resets."] } },
+  "Qiyana": { role:["mid"], tags:["assassin","terrain-r","burst"], weak:["armor","vision","group"], spikes:["Dirk","6"], skills:"Max Q > W > E",
+    runes:["Electrocute","Sudden","Eyeball","Relentless","Transcendence","Scorch"],
+    start:["Long Sword + 3 Pots"], core:["Youmuu's","Serylda","Ionian"], sit:["Edge of Night","GA","Maw"],
+    tips:{ early:["Avoid river/brush elements fights."], mid:["Deny terrain ult angles with wards."], late:["Group mid; no flank wards."] } },
+  "Diana": { role:["mid","jungle"], tags:["ap-assassin","aoe","engage"], weak:["antiheal","kite","vision"], spikes:["6","2
+
+
+
+
+
