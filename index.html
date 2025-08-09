@@ -430,59 +430,86 @@ const MATCHUPS = {
 
 /***** core advisory engine *****/
 function buildAdvice(lane, youName, themName){
+  const base = LANE_DEFAULTS[lane];
   const you = PROFILES[youName] || { role:[lane], tags:[], weak:[], spikes:[], skills:"", runes:[], start:[], core:[], sit:[], tips:{early:[],mid:[],late:[]} };
   const them = PROFILES[themName] || { role:[lane], tags:[], weak:[], spikes:[], skills:"", runes:[], start:[], core:[], sit:[], tips:{early:[],mid:[],late:[]} };
-  const base = LANE_DEFAULTS[lane];
 
+  // Build kits with strong fallbacks (always returns something)
   const summoners = you.summoners || base.sum;
   const runes = (you.runes && you.runes.length) ? you.runes : base.runes;
   const start = (you.start && you.start.length) ? you.start : base.start;
   let core = (you.core && you.core.length) ? you.core.slice() : base.core.slice();
-  let sit = uniq([...(you.sit||[]), ...(base.sit||[])]);
+  let sit  = uniq([...(you.sit||[]), ...(base.sit||[])]);
 
-  if(them.tags.includes("sustain")) sit.push("Executioner's/Morello/Putrifier");
-  if(them.tags.includes("assassin")||them.tags.includes("burst")) sit.push("Seeker's/Plated/Zhonya's");
-  if(them.tags.includes("tank")||them.tags.includes("armor-scale")) sit.push("Last Whisper/Black Cleaver");
-  if(them.tags.includes("shield")||them.tags.includes("enchanter")) sit.push("Serpent's Fang/Putrifier");
-  if(them.tags.includes("ap")||them.tags.includes("poke-ap")) sit.push("Null-Magic/Banshee's/Wit's End");
+  // ---------- Enemy-focused heuristics ----------
+  const exploit = [];   // "Do this to THEM"
+  const respect = [];   // "Watch out for THEM"
 
-  const plan = [];
-  if(lane==="mid") plan.push("Push level 1–2 only if safe; ward one side and lean.");
-  if(lane==="top") plan.push("Manage wave near your side; cannon crash for recall.");
-  if(lane==="adc") plan.push("Trade when support can follow; respect engage timers.");
-  if(lane==="support") plan.push("Fight on your ADC cooldowns; roam on push.");
-  if(lane==="jungle") plan.push("Track pathing; cross-map on opposite starts.");
+  // Lane baselines (kept short + neutral)
+  if(lane==="mid") respect.push("Track junglers 3:00–3:30; ward one side and lean.");
+  if(lane==="top") respect.push("Keep wave on your side early; cannon crash for recall.");
+  if(lane==="adc") respect.push("Trade only when support can follow; don’t handshake into engage CDs.");
+  if(lane==="support") respect.push("Fight when your ADC has sums and wave prio; roam on push.");
+  if(lane==="jungle") respect.push("Cross-map against opposite start; don’t coinflip losing sides.");
 
-  if(you.tags.includes("mobility") && them.weak.includes("skillshots")) plan.push("Sidestep key skillshots, then dash in during downtime.");
-  if(you.tags.includes("ranged") && !them.tags.includes("ranged")) plan.push("Short trades with autos/spells; back off before their gap close.");
-  if(them.tags.includes("assassin")) plan.push("Thin wave; hold CC or disengage for their dash/ult.");
-  if(them.tags.includes("tank")||them.tags.includes("armor-scale")) plan.push("Prioritize shred before extended fights.");
-  if(them.tags.includes("sustain")) plan.push("Apply grievous early; trade on anti-heal window.");
-  if(you.tags.includes("mana-early")) plan.push("Short trades; avoid spam until Lost Chapter/tear back.");
-  if(you.spikes.includes("6")) plan.push("Play for level 6 spike; crash on 5 for base or set up all-in at 6.");
-  if(them.spikes.includes("6")) plan.push("Respect their level 6; keep wave near tower before spike.");
+  // Simple strengths vs weaknesses map
+  const T = new Set((them.tags||[]).map(s=>s.toLowerCase()));
+  const W = new Set((them.weak||[]).map(s=>s.toLowerCase()));
+  const Y = new Set((you.tags||[]).map(s=>s.toLowerCase()));
 
-  plan.push(...(you.tips.early||[]).slice(0,2));
-  plan.push(...(you.tips.mid||[]).slice(0,2));
-  plan.push(...(you.tips.late||[]).slice(0,2));
+  // Exploit THEIR weaknesses
+  if(W.has("kite") || T.has("juggernaut") || T.has("melee") && !T.has("gapclose")) exploit.push("Play short trades and **kite** back; don’t allow extended fights.");
+  if(W.has("cc") || W.has("point-cc")) exploit.push("Hold **hard CC** for their dash/ultimate to stop the all-in.");
+  if(W.has("grievous") || T.has("sustain") || /drain|heal/i.test([...T].join(","))) { exploit.push("Buy **anti-heal** early (Executioner's/Morello/Putrifier)."); sit.push("Anti-heal"); }
+  if(W.has("armor") || T.has("tank") || T.has("armor-scale")) { exploit.push("Prioritize **armor shred** (Last Whisper/Black Cleaver) before extended fights."); sit.push("Armor shred"); }
+  if(W.has("mr") || T.has("ap") && !T.has("tank")) exploit.push("Stack **MR** only if they can reliably reach you; otherwise pressure with DPS.");
+  if(W.has("range") && Y.has("ranged")) exploit.push("Abuse **range**: hit on last-hits and step back before their gap close.");
+  if(W.has("wave") && (Y.has("wave")||Y.has("poke"))) exploit.push("Keep the wave on **your terms**; shove to set tempo then move first.");
+  if(W.has("vision") || T.has("assassin")) exploit.push("Control **vision**; force fights on wards and deny flank angles.");
+  if(W.has("mana-early")) exploit.push("Force **early trades** while they’re mana-gated; crash then reset.");
+  if(W.has("scales-poor")) exploit.push("Speed up the game: plates, early dragons, and skirmishes on timers.");
 
+  // Use YOUR kit to expose THEM
+  if(Y.has("ranged") && !T.has("ranged")) exploit.push("Take **short poke trades** (auto/spell → back). Don’t stand in gap close range.");
+  if(Y.has("poke") && (T.has("allin")||T.has("melee"))) exploit.push("**Chip** with poke, then fight on your cooldowns; avoid committing first.");
+  if(Y.has("mobility") && (T.has("skillshots")||W.has("skillshots"))) exploit.push("**Sidestep** key skillshots, then dash in during their downtime.");
+  if(Y.has("cc") && (T.has("assassin")||T.has("diver"))) exploit.push("**Save CC** for their entry; turn immediately when they commit.");
+  if(Y.has("split") && (T.has("group")||W.has("group"))) exploit.push("Drag them to **side lanes**; TP/join first on timers.");
+
+  // Respect THEIR spikes and threat (still framed as how you beat them)
+  if(T.has("assassin")) { respect.push("Position **off flanks**; keep control wards in river/side brush."); sit.push("Stopwatch/Seeker's/Plated"); }
+  if(T.has("engage")||T.has("allin")) respect.push("Track **flash/ult**; fight after those cooldowns or on your disengage timers.");
+  if(T.has("poke")||T.has("siege")) respect.push("Don’t stall in chokes; **force engages** from fog or trade sides.");
+  if(them.spikes && them.spikes.includes("6")) respect.push("**Respect level 6**; keep wave near tower before they ding.");
+  if(you.spikes && you.spikes.includes("6")) exploit.push("Play towards **your level 6 spike**; crash on 5 or set up the all-in.");
+
+  // Hand-crafted matchup notes (if we have them)
   const pair = `${youName}:${themName}`;
-  if(MATCHUPS[pair]) plan.push(...MATCHUPS[pair]);
+  if(MATCHUPS[pair]) exploit.push(...MATCHUPS[pair]);
+
+  // Compose final plan: EXPOSE first, then small RESPECT tail
+  const plan = [];
+  plan.push(`${youName} (${lane}) vs ${themName}`);
+  plan.push(...uniq(exploit).filter(Boolean));
+  plan.push(...uniq(respect).filter(Boolean).slice(0,3)); // keep respect concise
 
   const extras = [
-    "Ward timers: river/raptor @2:30–3:00; swap to sweeper on spike.",
+    "Ward timers: river/pixel/raptors @2:30–3:15. Swap to sweeper on first spike.",
     "Crash cannon waves for clean recalls; freeze near tower when behind.",
     "Ping objective timers; move first on prio."
   ];
 
   return {
     lane, youName, themName,
-    summoners, runes, start, core:uniq(core), sit:uniq(sit),
-    skills: you.skills || LANE_DEFAULTS[lane].skills,
-    plan: uniq(plan.filter(Boolean)),
+    summoners, runes, start,
+    core: uniq(core),
+    sit: uniq(sit),
+    skills: you.skills || base.skills,
+    plan: plan.filter(Boolean),
     extras
   };
 }
+
 /***** render + UI wiring *****/
 function renderAdvice(a){
   $("#results").style.display = "block";
