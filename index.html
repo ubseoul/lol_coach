@@ -489,7 +489,7 @@ function buildAdvice(lane, youName, themName){
 
   // Compose final plan: EXPOSE first, then small RESPECT tail
   const plan = [];
-  plan.push(`${youName} (${lane}) vs ${themName}`);
+ 
   plan.push(...uniq(exploit).filter(Boolean));
   plan.push(...uniq(respect).filter(Boolean).slice(0,3)); // keep respect concise
 
@@ -509,6 +509,7 @@ function buildAdvice(lane, youName, themName){
     extras
   };
 }
+
 
 /***** render + UI wiring *****/
 function renderAdvice(a){
